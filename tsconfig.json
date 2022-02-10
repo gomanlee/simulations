@@ -7,6 +7,20 @@
     "outDir": "dist",
     "declaration": true
   },
-  "include": ["./scripts", "./test", "./typechain"],
-  "files": ["./hardhat.config.ts"]
+  "include": [
+    "./scripts",
+    "./build/types",
+    "./test",
+    "helpers",
+    "config",
+    "node_modules/contract-types"
+  ],
+  "files": [
+    "./hardhat.config.ts",
+    "node_modules/@types/mocha/index.d.ts",
+    "node_modules/@nomiclabs/buidler-ethers/src/type-extensions.d.ts",
+    "node_modules/@typechain/hardhat/dist/type-extensions.d.ts",
+    "node_modules/@nomiclabs/buidler-waffle/src/type-extensions.d.ts",
+    "node_modules/@nomiclabs/buidler-etherscan/src/type-extensions.d.ts"
+  ]
 }
