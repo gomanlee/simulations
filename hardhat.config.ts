@@ -37,7 +37,7 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       forking: {
-        url: "https://speedy-nodes-nyc.moralis.io/742c747f6f1d4e38ef49a5b4/eth/mainnet/archive",
+        url: "https://speedy-nodes-nyc.moralis.io/" + process.env.MORALIS_TOKEN + "/eth/mainnet/archive",
         blockNumber: 14152459
       },
       accounts: accounts
