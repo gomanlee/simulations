@@ -4,7 +4,7 @@ import { TrueUSD, Compound } from 'contract-types'
 import { BigNumber, BigNumberish } from '@ethersproject/bignumber'
 import { expect } from 'chai';
 import { latestBlock, increaseTime, advanceBlockTo, advanceTimeAndBlock, advanceBlock } from '../../helpers'
-import { proposal84 } from './proposal'
+import { proposal84 } from './proposal.config'
 const { TrueUsd__factory } = TrueUSD
 const { Comptroller__factory, CompoundLens__factory, GovernorBravoDelegate__factory, CErc20Immutable__factory, Comp__factory, CToken__factory } = Compound
 
