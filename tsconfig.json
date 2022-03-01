@@ -11,6 +11,7 @@
     "./scripts",
     "./build/types",
     "./test",
+    "./src",
     "helpers",
     "config",
     "node_modules/contract-types"
