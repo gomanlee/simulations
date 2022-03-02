@@ -9,7 +9,6 @@ import {
   advanceBlockTo,
   advanceTimeAndBlock,
   advanceBlock,
-  increaseBlock,
   latestBlock,
 } from "../../helpers";
 import { CompoundLens__factory } from "contract-types/types/Compound/types";

@@ -8,7 +8,6 @@ import {
   advanceBlockTo,
   advanceTimeAndBlock,
   advanceBlock,
-  increaseBlock,
   latestBlock,
 } from "../../helpers";
 import { CompoundLens__factory } from "contract-types/types/Compound/types";
@@ -23,6 +22,8 @@ const {
   CToken__factory,
   CEther__factory,
 } = Compound;
+
+import { priceFeedAbi } from '../../abis/compound.json';
 
 const Accounts = {
   a16z: "0x9aa835bc7b8ce13b9b0c9764a52fbf71ac62ccf1",
@@ -40,7 +41,9 @@ const Contracts = {
   cDai: "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
   cUSDT: '0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9',
   cUSDC: '0x39aa39c021dfbae8fac545936693ac917d5e7563',
-};
+  Dai:  '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+  priceFeed: '0x6d2299c48a8dd07a872fdd0f8233924872ad1071'
+}
 
 let testAccounts: SignerWithAddress[] = []
 
@@ -56,7 +59,6 @@ enum Vote {
 }
 // let signers: Record<keyof typeof Accounts, SignerWithAddress>
 let signers: Record<keyof typeof Accounts, SignerWithAddress>;
-// transfer -> transfer ->  approve ->  mint
 
 describe("verification after proposal take effective", () => {
   before(async () => {
@@ -81,6 +83,7 @@ describe("verification after proposal take effective", () => {
 
     const startBlock = await latestBlock();
     console.log("from block: ", startBlock);
+    // 14172043 is the estimated block after proposal executed
     if (startBlock < 14172043) {
       console.log("begin ts:", new Date());
       const result = await voteToPassProposal();
@@ -90,6 +93,9 @@ describe("verification after proposal take effective", () => {
     } else {
       console.log("vote and pass proposal done");
     }
+
+    const state = await getProposalState();
+    expect(state, 'proposal should be executed').to.be.eq(pass_state);
   });
 
   let executedBlock;
@@ -97,8 +103,6 @@ describe("verification after proposal take effective", () => {
   it("Users should be able to supply TUSD at Lending Pool, and get compound after proposal is effective.", async () => {
     // get testAccount
     let testAccount: SignerWithAddress = testAccounts[0]
-    const state = await getProposalState();
-    expect(state).to.be.eq(pass_state);
 
     let amount = 100000
     await transferTusd(amount, testAccount.address);
@@ -145,14 +149,12 @@ describe("verification after proposal take effective", () => {
     await (await comptroller['claimComp(address)'](testAccount.address)).wait()
 
     balanceOfComp = await comp.balanceOf(testAccount.address)
-    debugger
     expect(balanceOfComp).to.be.gt(0)
   });
 
-  it('verify collateralFactor', async () => {
+  it('verify collateralFactor value', async () => {
     let testAccount: SignerWithAddress = testAccounts[1]
-    const state = await getProposalState();
-    expect(state).to.be.eq(pass_state);
+
     const comptroller = Comptroller__factory.connect(
         Contracts.Comptroller,
         testAccount
@@ -194,8 +196,6 @@ describe("verification after proposal take effective", () => {
   it("User could borrow cEth by cTusd after proposal effective", async () => {
     let testAccount: SignerWithAddress = testAccounts[2]
 
-    const state = await getProposalState();
-    expect(state).to.be.eq(pass_state);
     const comptroller = Comptroller__factory.connect(
         Contracts.Comptroller,
         testAccount
@@ -212,8 +212,7 @@ describe("verification after proposal take effective", () => {
     );
 
     let cTokenBalance = await (await cTusd.callStatic.balanceOf(testAccount.address)).toNumber() / Math.pow(10, underlyingDecimals);
-    expect(cTokenBalance).to.be.eq(0)
-
+    expect(cTokenBalance, 'test account has 0 cTusd before mint').to.be.eq(0)
 
     // test account supply tusd to the protocol as collateral (you will get cTusd in return)
     const decimals = await tusd.decimals();
@@ -226,10 +225,10 @@ describe("verification after proposal take effective", () => {
     const mintResult = await (await cTusd.mint(tusdAmount)).wait();
 
     cTokenBalance = await (await cTusd.callStatic.balanceOf(testAccount.address)).toNumber() / Math.pow(10, underlyingDecimals);
-    expect(cTokenBalance).to.be.gt(0)
+    expect(cTokenBalance, 'test account has ctusd after mint').to.be.gt(0)
 
     // cTusd enter market
-    const markets = [Contracts.cTUSD]; // This is the cToken contract(s) for your collateral
+    const markets = [Contracts.cTUSD]; 
     await (await comptroller.enterMarkets(markets)).wait();
 
     let underlyingToBorrow = 0.001;
@@ -245,6 +244,97 @@ describe("verification after proposal take effective", () => {
     expect(borrowBalance).to.be.eq(underlyingToBorrow)
 
   });
+
+  it('tusd collateral factor rate should be 80%', async () => {
+    let testAccount: SignerWithAddress = testAccounts[3]
+
+    const comptroller = Comptroller__factory.connect(
+        Contracts.Comptroller,
+        testAccount
+    );
+
+    let collateralAmount = 10;
+
+    await transferTusd(10000, testAccount.address);
+
+    let tusd = TrueUsd__factory.connect(Contracts.TUSD, testAccount);
+    const cDai = CErc20Immutable__factory.connect(Contracts.cDai, testAccount);
+    const cTusd = CErc20Immutable__factory.connect(
+      Contracts.cTUSD,
+      testAccount
+    );
+
+    // let cTokenBalance = await (await cTusd.callStatic.balanceOf(testAccount.address)).toNumber() / Math.pow(10, underlyingDecimals);
+    let cTokenBalance = await getBalanceOf(testAccount.address, cTusd)
+    expect(cTokenBalance, 'test account has 0 cTusd before mint').to.be.eq(0)
+
+    // test account supply tusd to the protocol as collateral (you will get cTusd in return)
+    const decimals = await tusd.decimals();
+
+    console.log('tusd balance before mint: ', await getBalanceOf(testAccount.address, tusd))
+
+    const tusdAmount = ethers.utils.parseUnits(
+        collateralAmount.toString(),
+        decimals
+    );
+
+    await (await tusd.approve(cTusd.address, tusdAmount)).wait();
+    await (await cTusd.mint(tusdAmount)).wait();
+
+    console.log('tusd balance after mint: ', await getBalanceOf(testAccount.address, tusd))
+    console.log('after mint cTusd Balance: ', await getBalanceOf(testAccount.address, cTusd))
+    cTokenBalance = await getBalanceOf(testAccount.address, cTusd)
+    expect(cTokenBalance, 'test account has ctusd after mint').to.be.gt(0)
+
+    // cTusd enter market
+    const markets = [Contracts.cTUSD]; 
+    await (await comptroller.enterMarkets(markets)).wait();
+
+    // liquidity is USD price asset
+    let { 1:liquidity, 2: shortfail } = await comptroller.getAccountLiquidity(testAccount.address);
+    let liquidity_value = ethers.utils.formatUnits(liquidity, underlyingDecimals)
+    let shortfail_value = ethers.utils.formatUnits(shortfail, underlyingDecimals)
+    
+    const priceFeed = new ethers.Contract(Contracts.priceFeed, priceFeedAbi, testAccount);
+    let underlyingPriceInUsd = await priceFeed.price('TUSD');
+    underlyingPriceInUsd = underlyingPriceInUsd / 1e6;
+
+    console.log('underlyingPriceInUsd: ', underlyingPriceInUsd)
+    console.log(`1 TUSD == ${underlyingPriceInUsd.toFixed(6)} USD`);
+    console.log(`You can borrow up to ${liquidity_value} USD worth of assets from the protocol.`);    
+    console.log(`short fail ${shortfail_value}.`);    
+
+    let underlyingToBorrow = 7;
+
+    const scaledUpBorrowAmount = ethers.utils.parseUnits(underlyingToBorrow.toString(), underlyingDecimals).toString()
+
+    const borrow = await cDai.borrow(scaledUpBorrowAmount);
+    const borrowResult = await borrow.wait(1);
+
+    let borrowBalance = await getBorrowBalance(testAccount.address, cDai)
+    expect(borrowBalance).to.be.eq(underlyingToBorrow)
+
+    let failure = borrowResult?.events?.find(_ => _.event === 'Failure');
+    if (failure) {
+      const errorCode = failure?.args?.error;
+      expect.fail(`below liquidity, but borrow failed, code ${errorCode}`)
+    }
+
+    // borrow amount out of the liqidity range
+    const overAmount = '2'
+    let overBorrowAmount = ethers.utils.parseUnits(overAmount, underlyingDecimals).toString()
+    const overBorrowResult = await (await cDai.borrow(overBorrowAmount)).wait()
+
+    failure = overBorrowResult?.events?.find(_ => _.event === 'Failure');
+    if (failure){
+        const errorCode = failure?.args?.error;
+        console.log('expect to get error code: ', errorCode.toNumber())
+    }else{
+        expect.fail('over liquidity, expect to get failure event when borrow')
+    }
+
+  })
+
 });
 
 async function getProposalState() {
@@ -346,6 +436,12 @@ async function transferTusd(amount: number, address: string) {
 
 async function getBorrowBalance(address:string, cToken: any){
     let balance = await cToken.callStatic.borrowBalanceCurrent(address);
+    balance = balance / Math.pow(10, underlyingDecimals);
+    return balance
+}
+
+async function getBalanceOf(address:String, token: any){
+    let balance = await token.callStatic.balanceOf(address)
     balance = balance / Math.pow(10, underlyingDecimals);
     return balance
 }
