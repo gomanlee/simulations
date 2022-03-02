@@ -13,6 +13,9 @@ import {
 import { CompoundLens__factory } from "contract-types/types/Compound/types";
 import { ENGINE_METHOD_ALL } from "constants";
 
+import { proposal84 } from '../../src/compound/proposal.config'
+import { createProposal} from '../../src/compound/proposal'
+
 const { TrueUsd__factory } = TrueUSD;
 const {
   Comptroller__factory,
@@ -83,10 +86,11 @@ describe("verification after proposal take effective", () => {
 
     const startBlock = await latestBlock();
     console.log("from block: ", startBlock);
-    // 14172043 is the estimated block after proposal executed
-    if (startBlock < 14172043) {
+    // 14235992 is the estimated block after proposal executed if start number 14216408
+    if (startBlock < 14235992) {
       console.log("begin ts:", new Date());
-      const result = await voteToPassProposal();
+      // const result = await voteToPassProposal();
+      const proposalState = await createProposal(proposal84)
       console.log("byend ts:", new Date());
       const endBlock = await latestBlock();
       console.log("end  block: ", endBlock);
@@ -342,6 +346,7 @@ async function getProposalState() {
         Contracts.GovernanceBravo,
         signers.a16z
     );
+    const proposalId = (await governance.proposalCount()).toString()
     const proposal = await governance.proposals(proposalId);
     const state = await governance.state(proposalId);
     return state;
